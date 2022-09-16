@@ -1,5 +1,5 @@
-# EstivalMesher
-Blender 2.9 addon for importing CAT files from Senran Kagura: Estival Versus
+# BURST Renewal Model Tool
+Blender 3.x addon for importing CAT files from Senran Kagura EV and BRN
 
 ## Installing
 
