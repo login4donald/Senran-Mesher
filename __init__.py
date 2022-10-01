@@ -1,5 +1,5 @@
 bl_info = {
-    "name": "Senran Kagura Blender Mesher (Experimental) r. 0050",
+    "name": "Senran Kagura Blender Mesher (Experimental) r. 0064",
     "author": "bluesnowball18 + loggey",
     "version": (0, 6),
     "blender": (3, 2, 1),
@@ -41,66 +41,85 @@ def import_cat_file(filepath):
 
         ## ================= START DEBUG BLOCK =================
 
-        # Bounding Box Start?
         file.seek(32, 1)
         unknown1, = struct.unpack("I", file.read(4))
-        #print("Unknown Start Value 1:", hex(unknown1))
 
-        # BVH Data Start?
         file.seek(20, 1)
         unknown2, = struct.unpack("I", file.read(4))
-        #print("Unknown Start Value 2:", hex(unknown2))
 
-        # there are two more addresses.
+        file.seek(4, 1)
+        unknown2a, = struct.unpack("I", file.read(4))
 
-        # BVH Data Start?
-        file.seek(20, 1)
+        file.seek(4, 1)
+        unknown2b, = struct.unpack("I", file.read(4))
+
+        file.seek(4, 1)
         unknown3, = struct.unpack("I", file.read(4))
-        #print("Unknown Start Value 3:", hex(unknown3))
 
-        # Loading Start?
         file.seek(4, 1)
         unknown4, = struct.unpack("I", file.read(4))
-        #print("Unknown Start Value 4:", hex(unknown4))
 
-        # Unknown Start?
         file.seek(4, 1)
         unknown5, = struct.unpack("I", file.read(4))
-        #print("Unknown Start Value 5:", hex(unknown5))
 
-        # Rigging-Data Start?
         file.seek(4, 1)
         faces_start, = struct.unpack("I", file.read(4))
 
-        # Unknown Start?
         file.seek(4, 1)
         unknown6, = struct.unpack("I", file.read(4))
-        #print("Unknown Start Value 6:", hex(unknown6))
-        #print(" -", unknown6)
 
-        # PolyGroup Start?
         file.seek(12, 1)
         unknown7, = struct.unpack("I", file.read(4))
-        #print("Unknown Start Value 7:", hex(unknown7))
-        #print(" -", unknown7)
+        print()
 
         file.seek(4, 1)
 
         ## ================= END DEBUG BLOCK =================
 
-        ##file.seek(28, 1)
         verts_start, = struct.unpack("I", file.read(4))
 
-        file.seek(56, 1)
+        ## ================= START DEBUG BLOCK =================
+
+        file.seek(20, 1)
+        unknown_count, = struct.unpack("I", file.read(4))
+
+        file.seek(8, 1)
+        unknown_count2, = struct.unpack("I", file.read(4))
+
+        unknown_count3, = struct.unpack("I", file.read(4))
+
+        unknown_count4, = struct.unpack("I", file.read(4))
+
+        unknown_count5, = struct.unpack("I", file.read(4))
+
+        unknown_count6, = struct.unpack("I", file.read(4))
+
+        unknown_count7, = struct.unpack("I", file.read(4))
+
+        ## ================= END DEBUG BLOCK =================
+
         faces_count, = struct.unpack("I", file.read(4))
 
         file.seek(12, 1)
         verts_count, = struct.unpack("I", file.read(4))
 
+        print(" -------------- Process START -------------- ")
+        print()
+        print(" Vertex Count:", verts_count)
+        print(" Face Count:", faces_count)
+        print()
+
         verts = []
         faces = []
+
         uvs = []
         uvmap = []
+
+        bounds = []
+        bvh = []
+
+        poly_groups = []
+        vert_groups = []
 
         # Padding Set
 
@@ -134,10 +153,17 @@ def import_cat_file(filepath):
         else:
             return
 
+        print(" Mesh Name:", names[names_index-1])
+        print()
+
+        print(" Vertex Padding Set.")
+        print()
+
         # Vertex & UV data -- Known Working
 
         file.seek(file_seek + verts_start)
         i = 0
+        ex = 0
 
         while i < verts_count:
             x, z, y = struct.unpack("fff", file.read(12))
@@ -151,6 +177,24 @@ def import_cat_file(filepath):
             if i == verts_count:
                 file_end = int(file.tell())
 
+        print(" Vertex Data Set.")
+
+
+        # Polygroup Data -- Known Working
+
+        file.seek(file_seek + unknown5)
+        i = 0
+        pg_amt = 0
+
+        while i < unknown_count:
+            pg_fcount, pg_unk, pg_foffset = struct.unpack("III", file.read(12))
+            file.seek(4, 1)
+            poly_groups.append((pg_foffset, pg_fcount))
+            #print()
+            i += 1
+            pg_amt += pg_fcount
+
+
         # Face/Triangle data -- Known Working
 
         file.seek(file_seek + faces_start)
@@ -158,7 +202,8 @@ def import_cat_file(filepath):
 
         if verts_format_2 != 0x58:
             while i < faces_count:
-                newFace = struct.unpack("HHH", file.read(6))
+                fx, fy, fz = struct.unpack("HHH", file.read(6))
+                newFace = (fx, fy, fz)
                 faces.append(newFace)
 
                 # Organize the UV corrdinates proper in the uvmap
@@ -176,7 +221,10 @@ def import_cat_file(filepath):
             if i == faces_count:
                 print(file.tell())
 
-        # Prep for other mesh
+        print(" Face Data Set.")
+
+
+        # Prep for other mesh, if any
 
         file.seek(file_end)
 
@@ -184,6 +232,7 @@ def import_cat_file(filepath):
             file_seek = file.tell() + 256 - 1 - (file.tell() + 256 - 1) % 256
 
         file.seek(file_seek)
+
 
         ## Create seperate mesh
 
@@ -193,6 +242,28 @@ def import_cat_file(filepath):
         object = bpy.data.objects.new(names[names_index-1], mesh)
         bpy.context.collection.objects.link(object)
 
+        print(" Mesh Data Set.")
+
+
+        ## Convert PolyGroups into VertexGroups
+
+        i = 0
+
+        while i < len(poly_groups):
+            group = object.vertex_groups.new(name='PolyGroup '+str(i))
+            pg = poly_groups[i]
+            j = pg[0]
+            j2 = (j + pg[1])
+
+            while j < j2:
+                m = faces[j]
+                group.add([m[0], m[1], m[2]], 1.0, 'ADD')
+                j += 1
+            i += 1
+
+        print(" Vertex Groups Set.")
+
+
         ## Simple Smooth Mesh
 
         mesh = object.data
@@ -200,6 +271,9 @@ def import_cat_file(filepath):
 
         for f in mesh.polygons:
             f.use_smooth = True
+
+        print(" Mesh Smoothed.")
+
 
         ## Apply materials
 
@@ -209,6 +283,8 @@ def import_cat_file(filepath):
             object.data.materials[0] = mat
         else:
             object.data.materials.append(mat)
+
+        print(" Generic Material(s) applied.")
 
         #print()
         #print("Statistics_____")
@@ -229,6 +305,7 @@ def import_cat_file(filepath):
             newUV.data[w].uv = uvmap[w]
             w += 1
 
+        print(" UV Map Data Set.")
         print()
 
         ## Iterate to the next data stream
@@ -236,8 +313,7 @@ def import_cat_file(filepath):
         names_index += 1
 
     file.close()
-    print("Complete.")
-
+    print(" -------------- Process Complete. --------------[]")
 
 
 
